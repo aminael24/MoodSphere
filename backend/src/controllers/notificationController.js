@@ -1,21 +1,25 @@
 import Notification from "../models/Notification.js";
+
 /**
  * GET /api/notifications
+ * Retourne { notifications, unreadCount }
  */
 export async function listMine(req, res) {
   try {
-    const notifs = await Notification.find({ recipient: req.user._id })
+    const notifications = await Notification.find({
+      recipient: req.user._id,
+    })
       .sort({ createdAt: -1 })
       .limit(50);
 
-    const unread = await Notification.countDocuments({
+    const unreadCount = await Notification.countDocuments({
       recipient: req.user._id,
       isRead: false,
     });
 
     res.json({
-      notifications: notifs,
-      unreadCount: unread,
+      notifications,
+      unreadCount,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -28,8 +32,13 @@ export async function listMine(req, res) {
 export async function markAllRead(req, res) {
   try {
     await Notification.updateMany(
-      { recipient: req.user._id, isRead: false },
-      { $set: { isRead: true } }
+      {
+        recipient: req.user._id,
+        isRead: false,
+      },
+      {
+        $set: { isRead: true },
+      }
     );
 
     res.json({ message: "ok" });
@@ -43,15 +52,24 @@ export async function markAllRead(req, res) {
  */
 export async function markRead(req, res) {
   try {
-    const n = await Notification.findOneAndUpdate(
-      { _id: req.params.id, recipient: req.user._id },
-      { $set: { isRead: true } },
-      { new: true }
+    const notification = await Notification.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        recipient: req.user._id,
+      },
+      {
+        $set: { isRead: true },
+      },
+      {
+        new: true,
+      }
     );
 
-    if (!n) return res.status(404).json({ message: "Introuvable" });
+    if (!notification) {
+      return res.status(404).json({ message: "Introuvable" });
+    }
 
-    res.json(n);
+    res.json(notification);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -19,7 +19,7 @@ import AdminOverview from "./pages/Admin.jsx";
 import AdminUsers from "./pages/AdminUsers.jsx";
 import AdminPosts from "./pages/AdminPosts.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
-
+import Notifications from "./pages/Notifications.jsx";
 function Private({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="page center"><p className="text-dim">Chargement…</p></div>;
@@ -71,7 +71,7 @@ export default function App() {
           <Route path="/therapist" element={<Private><Shell><Therapist /></Shell></Private>} />
           <Route path="/rooms" element={<Private><Shell><Rooms /></Shell></Private>} />
           <Route path="/rooms/:slug" element={<Private><Shell><RoomView /></Shell></Private>} />
-
+<Route path="/notifications" element={<Notifications />} />
           {/* Admin */}
           <Route path="/admin" element={<AdminOnly><Shell><AdminOverview /></Shell></AdminOnly>} />
           <Route path="/admin/users" element={<AdminOnly><Shell><AdminUsers /></Shell></AdminOnly>} />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import api from "../utils/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -8,11 +8,13 @@ import Toast from "../components/Toast.jsx";
 import CrisisModal from "../components/CrisisModal.jsx";
 import { meta } from "../utils/emotions.js";
 import BadgeToast from "../components/BadgeToast.jsx";
+
 const logoSrc = "/logo.png";
 
 export default function Feed() {
   const { user, refreshUser, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [posts, setPosts] = useState([]);
   const [content, setContent] = useState("");
@@ -22,7 +24,8 @@ export default function Feed() {
   const [lastAnalysis, setLastAnalysis] = useState(null);
   const [toast, setToast] = useState("");
   const [crisis, setCrisis] = useState(null);
-const [newBadge, setNewBadge] = useState(null);
+  const [newBadge, setNewBadge] = useState(null);
+
   const load = async () => {
     const r = await api.get("/posts/feed");
     setPosts(r.data);
@@ -31,6 +34,44 @@ const [newBadge, setNewBadge] = useState(null);
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+  console.log("📍 [Feed] useEffect scroll. state =", location.state, "| posts =", posts.length);
+  if (!location.state?.scrollTo) {
+    console.log("📍 [Feed] Pas de scrollTo, on sort");
+    return;
+  }
+  if (posts.length === 0) {
+    console.log("📍 [Feed] Pas encore de posts, on attend");
+    return;
+  }
+
+  const hash = location.state.scrollTo;
+  console.log("📍 [Feed] Cherche élément avec id =", hash);
+  
+  // Liste tous les IDs disponibles pour debug
+  const allIds = Array.from(document.querySelectorAll('[id^="post-"]')).map(el => el.id);
+  console.log("📍 [Feed] IDs disponibles dans le DOM :", allIds);
+
+  let tries = 0;
+  const tryScroll = () => {
+    tries++;
+    const el = document.getElementById(hash);
+    if (el) {
+      console.log("📍 [Feed] ✅ Élément trouvé, scroll");
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("post-highlight");
+      setTimeout(() => el.classList.remove("post-highlight"), 2400);
+      window.history.replaceState({}, "", "/feed");
+    } else if (tries < 20) {
+      console.log("📍 [Feed] ❌ Pas trouvé, retry", tries);
+      setTimeout(tryScroll, 250);
+    } else {
+      console.log("📍 [Feed] ❌ Abandon après 20 tentatives");
+    }
+  };
+  setTimeout(tryScroll, 200);
+}, [location.state, posts.length]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -44,33 +85,20 @@ const [newBadge, setNewBadge] = useState(null);
 
   const publish = async () => {
     if (!content.trim()) return;
-
     setPosting(true);
-
     try {
-      const r = await api.post("/posts", {
-        content,
-        anonymous,
-        visibility,
-      });
-
+      const r = await api.post("/posts", { content, anonymous, visibility });
       setPosts([r.data, ...posts]);
-      // Affiche les badges débloqués un par un
-if (r.data.newBadges && r.data.newBadges.length > 0) {
-  r.data.newBadges.forEach((badge, i) => {
-    setTimeout(() => setNewBadge(badge), i * 5500);
-  });
-}
+      if (r.data.newBadges && r.data.newBadges.length > 0) {
+        r.data.newBadges.forEach((badge, i) => {
+          setTimeout(() => setNewBadge(badge), i * 5500);
+        });
+      }
       setLastAnalysis(r.data.aiAnalysis);
       setContent("");
-
       if (r.data.crisisResources) setCrisis(r.data.crisisResources);
-
       await refreshUser();
-
-      showToast(
-        `Émotion détectée : ${meta(r.data.aiAnalysis.dominantEmotion).label}`
-      );
+      showToast(`Émotion détectée : ${meta(r.data.aiAnalysis.dominantEmotion).label}`);
     } finally {
       setPosting(false);
     }
@@ -88,13 +116,14 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
         </Link>
 
         <nav className="sidebar-menu">
-          <NavLink to="/feed"> Feed</NavLink>
-          <NavLink to="/explore"> Explorer</NavLink>
-          <NavLink to="/rooms"> Salons</NavLink>
-          <NavLink to="/journal"> Journal</NavLink>
+          <NavLink to="/feed">Feed</NavLink>
+          <NavLink to="/explore">Explorer</NavLink>
+          <NavLink to="/notifications">Notifications</NavLink>
+          <NavLink to="/rooms">Salons</NavLink>
+          <NavLink to="/journal">Journal</NavLink>
           <NavLink to="/therapist">AI Bot</NavLink>
-          <NavLink to="/badges"> Badges</NavLink>
-          <NavLink to="/profile"> Profil</NavLink>
+          <NavLink to="/badges">Badges</NavLink>
+          <NavLink to="/profile">Profil</NavLink>
         </nav>
 
         <div className="sidebar-user-card">
@@ -102,18 +131,15 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
             <div className="user-avatar">
               {user?.fullName?.[0] || user?.username?.[0] || "U"}
             </div>
-
             <div className="user-info">
               <strong>{user?.fullName || user?.username || "Utilisateur"}</strong>
               <span>{user?.email}</span>
             </div>
           </div>
-
           <button className="logout-under" onClick={handleLogout}>
             ← Se déconnecter
           </button>
         </div>
-
       </aside>
 
       <main className="feed-content">
@@ -125,15 +151,8 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
             transition={{ duration: 0.55, ease: "easeOut" }}
           >
             <span className="feed-tag">MoodSphere Feed</span>
-
-            <h2>
-              Comment <em>te sens-tu</em> ?
-            </h2>
-
-            <p>
-              Exprime ton humeur du moment. L'IA détectera ton émotion et
-              adaptera ton aura.
-            </p>
+            <h2>Comment <em>te sens-tu</em> ?</h2>
+            <p>Exprime ton humeur du moment. L'IA détectera ton émotion et adaptera ton aura.</p>
 
             <textarea
               className="composer-textarea"
@@ -153,7 +172,6 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
                   />
                   <span>Anonyme</span>
                 </label>
-
                 <select
                   className="visibility-select"
                   value={visibility}
@@ -164,7 +182,6 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
                   <option value="private">Privé</option>
                 </select>
               </div>
-
               <button className="publish-btn" disabled={posting} onClick={publish}>
                 {posting ? "Analyse IA..." : "Publier"}
               </button>
@@ -177,21 +194,12 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
                 animate={{ opacity: 1, y: 0 }}
               >
                 <span>L'IA a détecté :</span>
-
                 <strong style={{ color: meta(lastAnalysis.dominantEmotion).color }}>
-                  <span
-                    className="emotion-dot"
-                    style={{
-                      background: meta(lastAnalysis.dominantEmotion).color,
-                    }}
-                  />
+                  <span className="emotion-dot" style={{ background: meta(lastAnalysis.dominantEmotion).color }} />
                   {meta(lastAnalysis.dominantEmotion).emoji}{" "}
                   {meta(lastAnalysis.dominantEmotion).label}
                 </strong>
-
-                <small>
-                  confiance {Math.round((lastAnalysis.confidence || 0) * 100)}%
-                </small>
+                <small>confiance {Math.round((lastAnalysis.confidence || 0) * 100)}%</small>
               </motion.div>
             )}
           </motion.div>
@@ -205,7 +213,6 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
                 onDelete={(id) => setPosts(posts.filter((x) => x._id !== id))}
               />
             ))}
-
             {posts.length === 0 && (
               <div className="empty-feed">
                 <div className="empty-icon">🌙</div>
@@ -219,7 +226,7 @@ if (r.data.newBadges && r.data.newBadges.length > 0) {
 
       <Toast message={toast} />
       <CrisisModal data={crisis} onClose={() => setCrisis(null)} />
-        <BadgeToast badge={newBadge} onClose={() => setNewBadge(null)} />
+      <BadgeToast badge={newBadge} onClose={() => setNewBadge(null)} />
     </div>
   );
 }
@@ -234,7 +241,6 @@ const styles = `
   --cream: #FDF6EE;
   --caramel: #C8633A;
   --caramel-light: #E8936A;
-
   min-height: 100vh;
   background: #0D0608;
   color: var(--cream);
@@ -428,9 +434,7 @@ const styles = `
   margin: 14px 0 8px;
 }
 
-.composer-card h2 em {
-  color: var(--caramel-light);
-}
+.composer-card h2 em { color: var(--caramel-light); }
 
 .composer-card p {
   color: rgba(253,246,238,0.58);
@@ -485,9 +489,7 @@ const styles = `
   padding: 0 14px;
 }
 
-.visibility-select option {
-  color: #0D0608;
-}
+.visibility-select option { color: #0D0608; }
 
 .publish-btn {
   min-width: 150px;
@@ -539,14 +541,27 @@ const styles = `
   text-align: center;
 }
 
-.empty-icon {
-  font-size: 2.4rem;
-}
+.empty-icon { font-size: 2.4rem; }
 
 .empty-feed h3 {
   font-family: 'Playfair Display', serif;
   font-size: 1.7rem;
   font-weight: 400;
+}
+
+/* ── Highlight post depuis notification ── */
+.post-highlight {
+  border-color: rgba(232,147,106,0.75) !important;
+  box-shadow:
+    0 0 0 4px rgba(232,147,106,0.16),
+    0 0 38px rgba(232,147,106,0.35) !important;
+  animation: postHighlight 2.4s ease;
+}
+
+@keyframes postHighlight {
+  0%   { transform: scale(0.98); }
+  25%  { transform: scale(1.015); }
+  100% { transform: scale(1); }
 }
 
 @media (max-width: 950px) {
@@ -558,7 +573,6 @@ const styles = `
     bottom: auto;
     margin: 18px;
   }
-
   .feed-content {
     margin-left: 0;
     padding: 20px;

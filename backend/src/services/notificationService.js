@@ -1,14 +1,25 @@
 import Notification from "../models/Notification.js";
 
 /**
- * Cree une notification pour un utilisateur
+ * Crée une notification pour un utilisateur.
  */
 export async function createNotification({
-  recipient, sender, senderUsername, senderImage,
-  type, message, link,
+  recipient,
+  sender,
+  senderUsername,
+  senderImage,
+  type,
+  message,
+  link,
 }) {
-  // Ne pas se notifier soi-meme
-  if (sender && recipient && sender.toString() === recipient.toString()) return null;
+  if (!recipient || !type || !message) {
+    return null;
+  }
+
+  // Ne pas notifier l'utilisateur lui-même
+  if (sender && recipient && sender.toString() === recipient.toString()) {
+    return null;
+  }
 
   try {
     return await Notification.create({
@@ -21,7 +32,7 @@ export async function createNotification({
       link,
     });
   } catch (err) {
-    console.warn("[notif]", err.message);
+    console.warn("[notification]", err.message);
     return null;
   }
 }

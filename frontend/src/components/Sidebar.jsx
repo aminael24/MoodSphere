@@ -17,6 +17,7 @@ export default function Sidebar() {
   const userLinks = [
     { to: "/feed", label: "Feed" },
     { to: "/explore", label: "Explorer" },
+{ to: "/notifications", label: "Notifications" },
     { to: "/rooms", label: "Salons" },
     { to: "/journal", label: "Journal" },
     { to: "/therapist", label: "AI Bot" },

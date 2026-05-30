@@ -1,7 +1,10 @@
 import Post from "../models/Post.js";
 import User from "../models/User.js";
 import { detectEmotion } from "../services/aiEmotionService.js";
-import { getAuraColor, getRecommendation } from "../services/recommendationService.js";
+import {
+  getAuraColor,
+  getRecommendation,
+} from "../services/recommendationService.js";
 import { getCrisisResources } from "../services/crisisService.js";
 import { createNotification } from "../services/notificationService.js";
 import { checkBadges } from "../services/badgeService.js";
@@ -12,25 +15,33 @@ import { checkBadges } from "../services/badgeService.js";
 export async function createPost(req, res) {
   try {
     const { content, anonymous, visibility, tags } = req.body;
+
     if (!content || !content.trim()) {
       return res.status(400).json({ message: "Contenu vide" });
     }
 
-    // 1. IA
     const analysis = await detectEmotion(content);
     const auraColor = getAuraColor(analysis.dominantEmotion);
-    const recommendations = getRecommendation(analysis.dominantEmotion, analysis.quote);
 
-    // 2. Post (avec tags + crisis flag)
+    const recommendations = getRecommendation(
+      analysis.dominantEmotion,
+      analysis.quote
+    );
+
     const post = await Post.create({
       author: req.user._id,
       authorUsername: req.user.username,
       authorImage: req.user.profileImage,
       content,
       anonymous: !!anonymous,
-      visibility: ["public", "followers", "private"].includes(visibility) ? visibility : "public",
+      visibility: ["public", "followers", "private"].includes(visibility)
+        ? visibility
+        : "public",
       tags: Array.isArray(tags)
-        ? tags.map((t) => String(t).toLowerCase().trim()).filter(Boolean).slice(0, 10)
+        ? tags
+            .map((t) => String(t).toLowerCase().trim())
+            .filter(Boolean)
+            .slice(0, 10)
         : [],
       aiAnalysis: {
         dominantEmotion: analysis.dominantEmotion,
@@ -42,14 +53,19 @@ export async function createPost(req, res) {
       recommendations,
     });
 
-    // 3. Update user aura + history
     await User.findByIdAndUpdate(req.user._id, {
       auraColor,
       dominantEmotion: analysis.dominantEmotion,
-      $push: { moodHistory: { emotion: analysis.dominantEmotion, aura: auraColor, date: new Date() } },
+      $push: {
+        moodHistory: {
+          emotion: analysis.dominantEmotion,
+          aura: auraColor,
+          date: new Date(),
+        },
+      },
     });
 
-   const newBadges = await checkBadges(req.user._id, "post").catch(() => []);
+    const newBadges = await checkBadges(req.user._id, "post").catch(() => []);
 
     res.status(201).json({
       ...post.toObject(),
@@ -62,29 +78,43 @@ export async function createPost(req, res) {
 }
 
 /**
- * Anonymise un post avant envoi (ne pas exposer l'identite)
+ * Anonymise un post avant envoi.
  */
 function maskAnonymous(post) {
   if (!post.anonymous) return post;
+
   const obj = post.toObject ? post.toObject() : post;
+
   obj.authorUsername = "Anonyme";
   obj.author = null;
   obj.authorImage = "";
-  // Anonymiser les commentaires anonymes aussi
+
   if (obj.comments) {
     obj.comments = obj.comments.map((c) =>
-      c.anonymous ? { ...c, authorUsername: "Anonyme", author: null } : c
+      c.anonymous
+        ? {
+            ...c,
+            authorUsername: "Anonyme",
+            author: null,
+          }
+        : c
     );
   }
+
   return obj;
 }
 
 /**
- * GET /api/posts/feed - feed perso (mes posts + posts des utilisateurs suivis)
+ * GET /api/posts/feed
  */
 export async function getFeed(req, res) {
   try {
     const me = await User.findById(req.user._id);
+
+    if (!me) {
+      return res.status(404).json({ message: "Utilisateur introuvable" });
+    }
+
     const allowedAuthors = [me._id, ...me.following];
 
     const posts = await Post.find({
@@ -106,13 +136,17 @@ export async function getFeed(req, res) {
 }
 
 /**
- * GET /api/posts/public - flux global decouverte
+ * GET /api/posts/public
  */
 export async function getPublicFeed(req, res) {
   try {
-    const posts = await Post.find({ visibility: "public", isHidden: { $ne: true } })
+    const posts = await Post.find({
+      visibility: "public",
+      isHidden: { $ne: true },
+    })
       .sort({ createdAt: -1 })
       .limit(100);
+
     res.json(posts.map(maskAnonymous));
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -120,11 +154,15 @@ export async function getPublicFeed(req, res) {
 }
 
 /**
- * GET /api/posts/me - mes posts
+ * GET /api/posts/me
  */
 export async function getMyPosts(req, res) {
   try {
-    const posts = await Post.find({ author: req.user._id }).sort({ createdAt: -1 });
+    const posts = await Post.find({
+      author: req.user._id,
+      isHidden: { $ne: true },
+    }).sort({ createdAt: -1 });
+
     res.json(posts);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -132,14 +170,20 @@ export async function getMyPosts(req, res) {
 }
 
 /**
- * GET /api/posts/user/:id - posts publics d'un utilisateur
+ * GET /api/posts/user/:id
  */
 export async function getUserPosts(req, res) {
   try {
     const target = await User.findById(req.params.id);
-    if (!target) return res.status(404).json({ message: "Utilisateur introuvable" });
 
-    const isFollower = target.followers.some((id) => id.toString() === req.user._id.toString());
+    if (!target) {
+      return res.status(404).json({ message: "Utilisateur introuvable" });
+    }
+
+    const isFollower = target.followers.some(
+      (id) => id.toString() === req.user._id.toString()
+    );
+
     const isSelf = target._id.toString() === req.user._id.toString();
 
     const visibility = isSelf
@@ -149,11 +193,15 @@ export async function getUserPosts(req, res) {
       : ["public"];
 
     if (target.accountType === "private" && !isFollower && !isSelf) {
-      return res.json([]); // compte prive non suivi
+      return res.json([]);
     }
 
-    const posts = await Post.find({ author: target._id, visibility: { $in: visibility } })
-      .sort({ createdAt: -1 });
+    const posts = await Post.find({
+      author: target._id,
+      visibility: { $in: visibility },
+      isHidden: { $ne: true },
+    }).sort({ createdAt: -1 });
+
     res.json(posts.map(maskAnonymous));
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -166,14 +214,31 @@ export async function getUserPosts(req, res) {
 export async function updatePost(req, res) {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ message: "Post introuvable" });
+
+    if (!post) {
+      return res.status(404).json({ message: "Post introuvable" });
+    }
+
     if (post.author.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Action non autorisée" });
     }
+
     const { visibility, anonymous } = req.body;
-    if (visibility) post.visibility = visibility;
-    if (anonymous !== undefined) post.anonymous = anonymous;
+
+    if (visibility) {
+      if (!["public", "followers", "private"].includes(visibility)) {
+        return res.status(400).json({ message: "Visibilité invalide" });
+      }
+
+      post.visibility = visibility;
+    }
+
+    if (anonymous !== undefined) {
+      post.anonymous = !!anonymous;
+    }
+
     await post.save();
+
     res.json(post);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -186,11 +251,17 @@ export async function updatePost(req, res) {
 export async function deletePost(req, res) {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ message: "Post introuvable" });
+
+    if (!post) {
+      return res.status(404).json({ message: "Post introuvable" });
+    }
+
     if (post.author.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Action non autorisée" });
     }
+
     await post.deleteOne();
+
     res.json({ message: "Post supprimé" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -198,25 +269,32 @@ export async function deletePost(req, res) {
 }
 
 /**
- * POST /api/posts/:id/like - toggle
+ * POST /api/posts/:id/like
  */
 export async function toggleLike(req, res) {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ message: "Post introuvable" });
+
+    if (!post) {
+      return res.status(404).json({ message: "Post introuvable" });
+    }
 
     const uid = req.user._id.toString();
-    const idx = post.likes.findIndex((l) => l.toString() === uid);
-    const wasLiked = idx !== -1;
+
+    const index = post.likes.findIndex((likeId) => {
+      return likeId.toString() === uid;
+    });
+
+    const wasLiked = index !== -1;
+
     if (wasLiked) {
-      post.likes.splice(idx, 1);
+      post.likes.splice(index, 1);
     } else {
       post.likes.push(req.user._id);
     }
 
     await post.save();
 
-    // Notification (uniquement quand on AJOUTE un like)
     if (!wasLiked) {
       createNotification({
         recipient: post.author,
@@ -225,13 +303,15 @@ export async function toggleLike(req, res) {
         senderImage: req.user.profileImage,
         type: "like",
         message: `${req.user.username} a aimé ton post`,
-        link: "/feed",
+        link: `/feed#post-${post._id}`,
       }).catch(() => {});
-      // Badge "loved"
+
       checkBadges(post.author, "like").catch(() => {});
     }
 
-    res.json({ likes: post.likes });
+    res.json({
+      likes: post.likes,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -243,29 +323,36 @@ export async function toggleLike(req, res) {
 export async function addComment(req, res) {
   try {
     const { content, anonymous } = req.body;
+
     if (!content || !content.trim()) {
       return res.status(400).json({ message: "Commentaire vide" });
     }
+
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ message: "Post introuvable" });
+
+    if (!post) {
+      return res.status(404).json({ message: "Post introuvable" });
+    }
 
     post.comments.push({
       author: req.user._id,
       authorUsername: req.user.username,
-      content,
+      content: content.trim(),
       anonymous: !!anonymous,
     });
+
     await post.save();
 
-    // Notif au proprietaire du post
     createNotification({
       recipient: post.author,
       sender: req.user._id,
       senderUsername: req.user.username,
       senderImage: req.user.profileImage,
       type: "comment",
-      message: `${anonymous ? "Quelqu'un" : req.user.username} a commenté ton post`,
-      link: "/feed",
+      message: `${
+        anonymous ? "Quelqu'un" : req.user.username
+      } a commenté ton post`,
+      link: `/feed#post-${post._id}`,
     }).catch(() => {});
 
     res.status(201).json(maskAnonymous(post).comments);
