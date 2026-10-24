@@ -1,4 +1,4 @@
-# 🎭 MoodSphere v2
+# 🎭 MoodSphere 
 
 > Une application web sociale basée sur les émotions humaines, construite avec la stack MERN.
 
